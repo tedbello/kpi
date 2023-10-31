@@ -6,8 +6,7 @@ import type {
   Organization,
   Product,
   SubscriptionInfo,
-} from 'js/account/stripe';
-import Button from 'js/components/common/button';
+} from 'js/account/stripe.types';
 import {
   isAddonProduct,
   isChangeScheduled,
@@ -17,7 +16,6 @@ import {
 } from 'js/account/stripe.utils';
 import {
   changeSubscription,
-  notifyCheckoutFailure,
   postCheckout,
   postCustomerPortal,
 } from 'js/account/stripe.api';
@@ -81,16 +79,15 @@ const AddOnList = (props: {
   );
 
   const handleCheckoutError = () => {
-    notifyCheckoutFailure();
     props.setIsBusy(false);
   };
 
-  const manageAddOn = () => {
+  const manageAddOn = (price: BasePrice) => {
     if (!props.organization || props.isBusy) {
       return;
     }
     props.setIsBusy(true);
-    postCustomerPortal(props.organization.id)
+    postCustomerPortal(props.organization.id, price.id)
       .then(processCheckoutResponse)
       .catch(handleCheckoutError);
   };
@@ -106,7 +103,7 @@ const AddOnList = (props: {
         'addon'
       ) {
         // if the user's subscription is for a recurring add-on, send them to the customer portal to change products
-        manageAddOn();
+        manageAddOn(price);
       } else {
         // if the user's subscription is for a plan, open a modal to confirm the change
         changeSubscription(price.id, activeSubscriptions[0].id)
@@ -154,7 +151,7 @@ const AddOnList = (props: {
                     size={'m'}
                     label={t('manage')}
                     isDisabled={props.isBusy}
-                    onClick={manageAddOn}
+                    onClick={() => manageAddOn(price)}
                     isFullWidth
                   />
                 )}

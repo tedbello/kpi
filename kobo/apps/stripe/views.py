@@ -1,3 +1,5 @@
+import http
+
 import stripe
 from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
@@ -20,6 +22,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from kobo.apps.organizations.models import Organization
+from kobo.apps.stripe.constants import ACTIVE_STRIPE_STATUSES
 from kobo.apps.stripe.serializers import (
     ChangePlanSerializer,
     CheckoutLinkSerializer,
@@ -278,26 +281,102 @@ class CustomerPortalView(APIView):
     permission_classes = (IsAuthenticated,)
 
     @staticmethod
-    def generate_portal_link(user, organization_id):
-        organization = Organization.objects.get(
-            id=organization_id, owner__organization_user__user_id=user
-        )
-        customer = Customer.objects.get(
-            subscriber=organization, livemode=settings.STRIPE_LIVE_MODE
-        )
-        session = stripe.billing_portal.Session.create(
+    def generate_portal_link(user, organization_id, price):
+        customer = Customer.objects.filter(
+            subscriber_id=organization_id,
+            subscriber__owner__organization_user__user_id=user,
+            subscriptions__status__in=ACTIVE_STRIPE_STATUSES,
+            livemode=settings.STRIPE_LIVE_MODE,
+        ).values(
+            'id', 'subscriptions__id', 'subscriptions__items__id'
+        ).first()
+
+        if not customer:
+            return Response(
+                {'error': f"Couldn't find customer with organization id {organization_id}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        portal_kwargs = {}
+
+        # if we're generating a portal link for an add-on, generate a custom portal configuration
+        if price and price.product.metadata['product_type'] == 'addon':
+            all_configs = stripe.billing_portal.Configuration.list(
+                api_key=djstripe_settings.STRIPE_SECRET_KEY,
+                limit=100,
+            )
+
+            if not len(all_configs):
+                return Response({'error': "Missing Stripe billing configuration."}, status=status.HTTP_502_BAD_GATEWAY)
+
+            # get the portal configuration that lets us switch to the provided price
+            current_config = next(
+                (config for config in all_configs if (
+                        config['active'] and
+                        config['livemode'] == settings.STRIPE_LIVE_MODE and
+                        config['metadata'].get('portal_price', None) == price.id
+                )), None
+            )
+
+            # we couldn't find the right configuration, let's try making a new one
+            if not current_config:
+                # get the active default configuration
+                current_config = next(
+                    (config for config in all_configs if (
+                        config['is_default'] and
+                        config['active'] and
+                        config['livemode'] == settings.STRIPE_LIVE_MODE
+                    )), None
+                )
+                # add the price we're switching into to the list of prices that allow subscription updates
+                new_product = [
+                    {
+                        'prices': [price.id],
+                        'product': price.product.id,
+                    },
+                ]
+                current_config['features']['subscription_update']['products'].append(new_product)
+                # create the billing configuration on Stripe, so it's ready when we send the customer to check out
+                current_config = stripe.billing_portal.Configuration.create(
+                    api_key=djstripe_settings.STRIPE_SECRET_KEY,
+                    business_profile=current_config['business_profile'],
+                    features=current_config['features'],
+                    metadata={
+                        'portal_price': price.id,
+                    }
+                )
+
+            portal_kwargs = {
+                'configuration': current_config['id'],
+                'flow_data': {
+                    'type': 'subscription_update_confirm',
+                    'subscription_update_confirm': {
+                        'items': [
+                            {
+                                'id': customer['subscriptions__items__id'],
+                                'price': price.id,
+                            },
+                        ],
+                        'subscription': customer['subscriptions__id'],
+                    }
+                },
+            }
+
+        stripe_response = stripe.billing_portal.Session.create(
             api_key=djstripe_settings.STRIPE_SECRET_KEY,
-            customer=customer.id,
+            customer=customer['id'],
             return_url=f'{settings.KOBOFORM_URL}/#/account/plan',
+            **portal_kwargs,
         )
-        return session
+        return Response({'url': stripe_response['url']})
 
     def post(self, request):
         serializer = CustomerPortalSerializer(data=request.query_params)
         serializer.is_valid(raise_exception=True)
         organization_id = serializer.validated_data['organization_id']
-        session = self.generate_portal_link(request.user, organization_id)
-        return Response({'url': session['url']})
+        price = serializer.validated_data.get('price_id', None)
+        response = self.generate_portal_link(request.user, organization_id, price)
+        return response
 
 
 class SubscriptionViewSet(viewsets.ReadOnlyModelViewSet):
