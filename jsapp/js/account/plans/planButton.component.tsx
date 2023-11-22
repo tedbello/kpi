@@ -1,7 +1,6 @@
 import BillingButton from 'js/account/plans/billingButton.component';
 import React, {useCallback} from 'react';
-import styles from 'js/account/plans/plan.module.scss';
-import {
+import type {
   BasePrice,
   Organization,
   Price,
@@ -14,74 +13,58 @@ import {
 } from 'js/account/stripe.utils';
 
 interface PlanButtonProps {
-  price: Price;
-  isBusy: boolean;
-  plans: SubscriptionInfo[] | null;
-  setIsBusy: (value: boolean) => void;
-  hasManageableStatus: (subscription: SubscriptionInfo) => boolean;
-  isSubscribedProduct: (product: Price) => boolean;
   buySubscription: (price: BasePrice) => void;
+  downgrading: boolean;
+  isBusy: boolean;
+  isSubscribedToPlan: boolean;
+  showManage: boolean;
   organization?: Organization | null;
+  price: Price;
+  setIsBusy: (value: boolean) => void;
 }
 
+/**
+ * A button that's used to start checkout for a Plan at Stripe.
+ * Plans need extra logic that add-ons don't, mostly to display the correct label text.
+ */
 export const PlanButton = ({
   price,
   organization,
-  plans,
+  downgrading,
   isBusy,
   setIsBusy,
   buySubscription,
-  hasManageableStatus,
-  isSubscribedProduct,
+  showManage,
+  isSubscribedToPlan,
 }: PlanButtonProps) => {
-  const shouldShowManage = useCallback(
-    (product: Price) => {
-      const subscriptions = getSubscriptionsForProductId(product.id, plans);
-      if (!subscriptions || !subscriptions.length) {
-        return false;
-      }
-
-      return subscriptions.some((subscription: SubscriptionInfo) =>
-        hasManageableStatus(subscription)
-      );
-    },
-    [hasManageableStatus]
-  );
-
-  if (!price || !organization) {
+  if (!price || !organization || price.prices.unit_amount === 0) {
     return null;
   }
 
-  const manageSubscription = (price?: BasePrice) => {
+  const manageSubscription = (subscriptionPrice?: BasePrice) => {
     setIsBusy(true);
-    postCustomerPortal(organization.id, price?.id)
+    postCustomerPortal(organization.id, subscriptionPrice?.id)
       .then(processCheckoutResponse)
       .catch(() => setIsBusy(false));
   };
 
-  if (price.prices.unit_amount === 0) {
-    return <div className={styles.btnSpacePlaceholder} />;
-  }
-
-  if (!isSubscribedProduct(price) && !shouldShowManage(price)) {
+  if (!isSubscribedToPlan && !showManage && !downgrading) {
     return (
       <BillingButton
         label={t('Upgrade')}
         onClick={() => buySubscription(price.prices)}
         aria-label={`upgrade to ${price.name}`}
-        aria-disabled={isBusy}
         isDisabled={isBusy}
       />
     );
   }
 
-  if (isSubscribedProduct(price) || shouldShowManage(price)) {
+  if (showManage || isSubscribedToPlan) {
     return (
       <BillingButton
         label={t('Manage')}
         onClick={manageSubscription}
         aria-label={`manage your ${price.name} subscription`}
-        aria-disabled={isBusy}
         isDisabled={isBusy}
       />
     );
@@ -92,7 +75,6 @@ export const PlanButton = ({
       label={t('Change plan')}
       onClick={() => buySubscription(price.prices)}
       aria-label={`change your subscription to ${price.name}`}
-      aria-disabled={isBusy}
       isDisabled={isBusy}
     />
   );

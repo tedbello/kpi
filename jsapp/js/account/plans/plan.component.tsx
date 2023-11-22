@@ -29,6 +29,7 @@ import subscriptionStore from 'js/account/subscriptionStore';
 import {when} from 'mobx';
 import {
   getSubscriptionsForProductId,
+  isChangeScheduled,
   processCheckoutResponse,
 } from 'js/account/stripe.utils';
 import type {
@@ -123,9 +124,9 @@ export default function Plan() {
     SubscriptionInfo[]
   >([]);
   const [confirmModal, setConfirmModal] = useState<ConfirmChangeProps>({
-    price: null,
+    newPrice: null,
     products: [],
-    subscription: null,
+    currentSubscription: null,
   });
 
   const [searchParams] = useSearchParams();
@@ -142,6 +143,28 @@ export default function Plan() {
     (subscription: SubscriptionInfo) =>
       ACTIVE_STRIPE_STATUSES.includes(subscription.status),
     []
+  );
+
+  const shouldShowManage = useCallback(
+    (product: Price) => {
+      const subscriptions = getSubscriptionsForProductId(
+        product.id,
+        state.subscribedProduct
+      );
+      if (!subscriptions || !subscriptions.length) {
+        return false;
+      }
+
+      const activeSubscription = subscriptions.find(
+        (subscription: SubscriptionInfo) => hasManageableStatus(subscription)
+      );
+      if (!activeSubscription) {
+        return false;
+      }
+
+      return isChangeScheduled(product.prices, [activeSubscription]);
+    },
+    [hasManageableStatus, state.subscribedProduct]
   );
 
   const freeTierOverride = useMemo((): FreeTierOverride | null => {
@@ -328,9 +351,8 @@ export default function Plan() {
 
   const dismissConfirmModal = () => {
     setConfirmModal((prevState) => {
-      return {...prevState, price: null, subscription: null};
+      return {...prevState, newPrice: null, currentSubscription: null};
     });
-    setIsBusy(false);
   };
 
   const buySubscription = (price: BasePrice) => {
@@ -340,7 +362,7 @@ export default function Plan() {
     setIsBusy(true);
     if (activeSubscriptions.length) {
       if (
-        activeSubscriptions[0].items[0].price.unit_amount < price.unit_amount
+        activeSubscriptions[0].items?.[0].price.unit_amount < price.unit_amount
       ) {
         // if the user is upgrading prices, send them to the customer portal
         // this will immediately change their subscription
@@ -352,8 +374,8 @@ export default function Plan() {
         // this will downgrade the subscription at the end of the current billing period
         setConfirmModal({
           products: state.products,
-          price: price,
-          subscription: activeSubscriptions[0],
+          newPrice: price,
+          currentSubscription: activeSubscriptions[0],
         });
       }
     } else {
@@ -578,10 +600,14 @@ export default function Plan() {
                     )}
                     <PlanButton
                       price={price}
-                      hasManageableStatus={hasManageableStatus}
-                      isSubscribedProduct={isSubscribedProduct}
+                      downgrading={
+                        activeSubscriptions?.length > 0 &&
+                        activeSubscriptions?.[0].items?.[0].price.unit_amount >
+                          price.prices.unit_amount
+                      }
+                      isSubscribedToPlan={isSubscribedProduct(price)}
                       buySubscription={buySubscription}
-                      plans={state.subscribedProduct}
+                      showManage={shouldShowManage(price)}
                       isBusy={isBusy}
                       setIsBusy={setIsBusy}
                       organization={state.organization}
@@ -652,10 +678,10 @@ export default function Plan() {
             setIsBusy={setIsBusy}
             products={state.products}
             organization={state.organization}
-            buyAddOn={buySubscription}
+            onClickBuy={buySubscription}
           />
           <ConfirmChangeModal
-            toggleModal={dismissConfirmModal}
+            onRequestClose={dismissConfirmModal}
             {...confirmModal}
           />
         </div>

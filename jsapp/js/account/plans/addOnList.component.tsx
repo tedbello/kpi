@@ -17,12 +17,16 @@ import {postCustomerPortal} from 'js/account/stripe.api';
 import styles from './addOnList.module.scss';
 import BillingButton from 'js/account/plans/billingButton.component';
 
+/**
+ * A table of add-on products along with buttons to purchase/manage them.
+ * @TODO Until one-time add-ons are complete, this only displays recurring add-ons.
+ */
 const AddOnList = (props: {
   products: Product[] | null;
   organization: Organization | null;
   isBusy: boolean;
   setIsBusy: (value: boolean) => void;
-  buyAddOn: (price: BasePrice) => void;
+  onClickBuy: (price: BasePrice) => void;
 }) => {
   const [subscribedAddOns, setSubscribedAddOns] = useState<SubscriptionInfo[]>(
     []
@@ -78,7 +82,7 @@ const AddOnList = (props: {
     props.setIsBusy(false);
   };
 
-  const manageAddOn = (price?: BasePrice) => {
+  const onClickManage = (price?: BasePrice) => {
     if (!props.organization || props.isBusy) {
       return;
     }
@@ -104,16 +108,11 @@ const AddOnList = (props: {
           )}
         </p>
       </caption>
-      <colgroup>
-        <col className={styles.product} />
-        <col className={styles.price} />
-        <col className={styles.buy} />
-      </colgroup>
       <tbody>
         {addOnProducts.map((product) =>
           product.prices.map((price) => (
-            <tr key={price.id}>
-              <td>{product.name}</td>
+            <tr className={styles.row} key={price.id}>
+              <td className={styles.product}>{product.name}</td>
               <td className={styles.price}>{price.human_readable_price}</td>
               <td>
                 {isSubscribedAddOnPrice(price) && (
@@ -121,7 +120,7 @@ const AddOnList = (props: {
                     size={'m'}
                     label={t('manage')}
                     isDisabled={props.isBusy}
-                    onClick={manageAddOn}
+                    onClick={onClickManage}
                     isFullWidth
                   />
                 )}
@@ -130,7 +129,7 @@ const AddOnList = (props: {
                     size={'m'}
                     label={t('buy now')}
                     isDisabled={props.isBusy}
-                    onClick={() => props.buyAddOn(price)}
+                    onClick={() => props.onClickBuy(price)}
                     isFullWidth
                   />
                 )}

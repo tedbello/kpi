@@ -1,6 +1,6 @@
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
+// `cx()` is just an alias for `classNames()` - see https://github.com/JedWatson/classnames
 import cx from 'classnames';
-
 import LoadingSpinner from 'js/components/common/loadingSpinner';
 import KoboModal from 'js/components/modals/koboModal';
 import KoboModalHeader from 'js/components/modals/koboModalHeader';
@@ -22,40 +22,48 @@ import styles from './confirmChangeModal.module.scss';
 import BillingButton from 'js/account/plans/billingButton.component';
 
 export interface ConfirmChangeProps {
-  price: BasePrice | null;
+  newPrice: BasePrice | null;
   products: Product[] | null;
-  subscription: SubscriptionInfo | null;
+  currentSubscription: SubscriptionInfo | null;
 }
 
+interface ConfirmChangeModalProps extends ConfirmChangeProps {
+  onRequestClose: () => void;
+}
+
+/**
+ * Confirmation step for downgrading a currentSubscription to a lower newPrice.
+ * This modal is responsible for displaying the details of the change,
+ * then making the API request.
+ */
 const ConfirmChangeModal = ({
-  price,
+  newPrice,
   products,
-  subscription,
-  toggleModal,
-}: ConfirmChangeProps & {
-  toggleModal: () => void;
-}) => {
+  currentSubscription,
+  onRequestClose,
+}: ConfirmChangeModalProps) => {
   const [isLoading, setIsLoading] = useState(false);
+  const [pendingChange, setPendingChange] = useState(false);
 
   const shouldShow = useMemo(
-    () => !!(subscription && price),
-    [price, subscription]
+    () => !!(currentSubscription && newPrice),
+    [newPrice, currentSubscription]
   );
 
-  const getProductForPrice = useCallback(
-    (price) =>
+  const getProductForPriceId = useCallback(
+    (priceId: string) =>
       products?.find((product: Product) => {
         return product.prices.some(
-          (productPrice) => productPrice.id === price.id
+          (productPrice) => productPrice.id === priceId
         );
       }),
     [products]
   );
 
-  // get a translatable description of a price
+  // get a translatable description of a newPrice
   const getPriceDescription = useCallback(
     (price: BasePrice) => {
-      const product = getProductForPrice(price);
+      const product = getProductForPriceId(price.id);
       if (price && product) {
         if (isAddonProduct(product)) {
           return t('##add_on_name## add-on').replace(
@@ -83,7 +91,7 @@ const ConfirmChangeModal = ({
   // get the product type to display as a translatable string
   const getPriceType = useCallback(
     (price: BasePrice) => {
-      const product = getProductForPrice(price);
+      const product = getProductForPriceId(price.id);
       if (price && product) {
         if (isAddonProduct(product)) {
           return t('add-on');
@@ -97,67 +105,73 @@ const ConfirmChangeModal = ({
   );
 
   useEffect(() => {
-    setIsLoading(false);
-  }, [shouldShow]);
+    if (!pendingChange) {
+      setIsLoading(false);
+    }
+  }, [shouldShow && pendingChange]);
 
   const submitChange = () => {
-    if (isLoading || !price || !subscription) {
+    if (isLoading || !newPrice || !currentSubscription) {
       return;
     }
     setIsLoading(true);
-    changeSubscription(price.id, subscription.id)
+    setPendingChange(true);
+    changeSubscription(newPrice.id, currentSubscription.id)
       .then((data) => {
         processChangePlanResponse(data).then((status) => {
           if (status !== ChangePlanStatus.success) {
-            toggleModal();
+            onRequestClose();
           }
         });
       })
-      .catch(toggleModal);
+      .catch(onRequestClose)
+      .finally(() => setPendingChange(false));
   };
 
   return (
-    <KoboModal isOpen={shouldShow} onRequestClose={toggleModal} size='medium'>
+    <KoboModal
+      isOpen={shouldShow}
+      onRequestClose={onRequestClose}
+      size='medium'
+    >
       <KoboModalHeader>{t('Changes to your Plan')}</KoboModalHeader>
       <KoboModalContent>
         <section className={cx(styles.loading, {hidden: !isLoading})}>
-          <LoadingSpinner message={t('Processing your transaction...')} />
+          <LoadingSpinner message={t('Processing your transaction…')} />
         </section>
         <section hidden={isLoading}>
-          {price?.recurring &&
-            subscription?.items[0].price.recurring?.interval && (
-              <>
-                <p>
-                  {t('You are switching to the ##new_product_type##.').replace(
-                    /##new_product_type##/g,
-                    getPriceDescription(price)
-                  )}{' '}
-                  {price.metadata['product_type'] === 'plan' &&
-                    subscription?.items[0].price.product.metadata[
-                      'product_type'
-                    ] === 'addon' &&
-                    t(
-                      'Because this plan includes unlimited storage, your storage add-on will be canceled.'
-                    ) + ' '}
-                  {t(
-                    `Your current ##product_type## will remain in effect until ##billing_end_date##.
+          {newPrice?.recurring &&
+            currentSubscription?.items[0].price.recurring?.interval && (
+              <p>
+                {t('You are switching to the ##new_product_type##.').replace(
+                  '##new_product_type##',
+                  getPriceDescription(newPrice)
+                )}{' '}
+                {newPrice.metadata['product_type'] === 'plan' &&
+                  currentSubscription?.items[0].price.product.metadata[
+                    'product_type'
+                  ] === 'addon' &&
+                  t(
+                    'Because this plan includes unlimited storage, your storage add-on will be canceled.'
+                  ) + ' '}
+                {t(
+                  `Your current ##product_type## will remain in effect until ##billing_end_date##.
                     Starting on ##billing_end_date## and until you cancel, we will bill you ##new_price## per ##interval##.`
+                )
+                  .replace(
+                    /##product_type##/g,
+                    getPriceType(currentSubscription.items[0].price)
                   )
-                    .replace(
-                      /##product_type##/g,
-                      getPriceType(subscription.items[0].price)
-                    )
-                    .replace(
-                      /##billing_end_date##/g,
-                      formatDate(subscription.current_period_end)
-                    )
-                    .replace(
-                      '##new_price##',
-                      price.human_readable_price.split('/')[0]
-                    )
-                    .replace('##interval##', price.recurring.interval)}
-                </p>
-              </>
+                  .replace(
+                    /##billing_end_date##/g,
+                    formatDate(currentSubscription.current_period_end)
+                  )
+                  .replace(
+                    '##new_price##',
+                    newPrice.human_readable_price.split('/')[0]
+                  )
+                  .replace('##interval##', newPrice.recurring.interval)}
+              </p>
             )}
         </section>
       </KoboModalContent>
@@ -170,7 +184,7 @@ const ConfirmChangeModal = ({
         <BillingButton
           color='red'
           isDisabled={isLoading}
-          onClick={toggleModal}
+          onClick={onRequestClose}
           label={t('Cancel')}
         />
       </KoboModalFooter>
