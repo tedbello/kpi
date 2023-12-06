@@ -1,8 +1,9 @@
 @use '~kobo-common/src/styles/colors';
 @use 'scss/breakpoints';
+@use 'scss/sizes';
 
 .header {
-  font-size: 1.125em;
+  font-size: sizes.$r18;
   font-weight: 700;
   color: colors.$kobo-storm;
   text-transform: uppercase;
@@ -14,18 +15,22 @@
 
 .table {
   table-layout: fixed;
-  border-collapse: separate;
-  border-spacing: 1em;
+  border-collapse: collapse;
+  border-spacing: 0;
+
+  & tr {
+    border-top: 1px solid colors.$kobo-cloud;
+
+    &:last-child {
+      border-bottom: 1px solid colors.$kobo-cloud;
+    }
+  }
 
   & td {
-    padding-block: 0.5em;
+    padding-block: 1em;
     font-weight: 700;
     overflow: hidden;
   }
-}
-
-.row:first-child > td:not(:last-child) {
-  border-top: 1px solid colors.$kobo-cloud;
 }
 
 .product,
