@@ -1,3 +1,4 @@
+from django.contrib.auth.models import User
 from django.db.models import Sum, Q
 from django.db.models.functions import Coalesce
 from django.utils import timezone
@@ -5,7 +6,7 @@ from rest_framework import serializers
 from rest_framework.fields import empty
 
 from kobo.apps.organizations.models import Organization
-from kobo.apps.project_views.models.assignment import User
+from kobo.apps.stripe.constants import ACTIVE_STRIPE_STATUSES
 from kobo.apps.trackers.models import NLPUsageCounter
 from kpi.deployment_backends.kc_access.shadow_models import (
     KobocatXForm,
@@ -28,7 +29,6 @@ class AssetUsageSerializer(serializers.HyperlinkedModelSerializer):
     submission_count_current_month = serializers.SerializerMethodField()
     submission_count_current_year = serializers.SerializerMethodField()
     submission_count_all_time = serializers.SerializerMethodField()
-    _now = timezone.now().date()
 
     class Meta:
         model = Asset
@@ -44,6 +44,11 @@ class AssetUsageSerializer(serializers.HyperlinkedModelSerializer):
             'submission_count_current_year',
             'submission_count_all_time',
         )
+
+    def __init__(self, instance=None, data=empty, **kwargs):
+        super().__init__(instance=instance, data=data, **kwargs)
+
+        self._now = timezone.now().date()
 
     def get_nlp_usage_current_month(self, asset):
         start_date = self._now.replace(day=1)
@@ -99,7 +104,6 @@ class ServiceUsageSerializer(serializers.Serializer):
     current_month_start = serializers.SerializerMethodField()
     current_year_start = serializers.SerializerMethodField()
     billing_period_end = serializers.SerializerMethodField()
-    _now = timezone.now().date()
 
     def __init__(self, instance=None, data=empty, **kwargs):
         super().__init__(instance=instance, data=data, **kwargs)
@@ -113,6 +117,7 @@ class ServiceUsageSerializer(serializers.Serializer):
         self._period_start = None
         self._period_end = None
         self._subscription_interval = None
+        self._now = timezone.now().date()
         self._get_per_asset_usage(instance)
 
     def get_total_nlp_usage(self, user):
@@ -216,16 +221,15 @@ class ServiceUsageSerializer(serializers.Serializer):
             # Couldn't find organization, proceed as normal
             return
 
-        """
-        Commented out until the Enterprise plan is implemented
-
-        # If the user is in an organization, get all org users so we can query their total org usage
-        self._user_ids = list(
-            User.objects.values_list('pk', flat=True).filter(
-                organizations_organization__id=organization_id
-            )
+        # if the user is in an organization and has an enterprise plan, get all org users and their total usage
+        enterprise_users = User.objects.values_list('pk', flat=True).filter(
+            organizations_organization__id=organization_id,
+            organizations_organization__djstripe_customers__subscriptions__status__in=ACTIVE_STRIPE_STATUSES,
+            organizations_organization__djstripe_customers__subscriptions__items__price__product__metadata__has_key='plan_type',
+            organizations_organization__djstripe_customers__subscriptions__items__price__product__metadata__plan_type='enterprise',
         )
-        """
+        if enterprise_users.exists():
+            self._user_ids = list(enterprise_users)
 
         # If they have a subscription, use its start date to calculate beginning of current month/year's usage
         billing_details = organization.active_subscription_billing_details

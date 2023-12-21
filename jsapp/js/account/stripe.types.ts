@@ -160,17 +160,26 @@ export interface Organization {
   slug: string;
 }
 
+export enum PlanNames {
+  'FREE' = 'Community',
+  'COMMUNITY' = 'Community',
+  'PRO' = 'Professional',
+  'ENTERPRISE' = 'Enterprise',
+  'ENTERPRISE_GOLD' = 'Enterprise Gold',
+  'ENTERPRISE_PLATINUM' = 'Enterprise Platinum',
+}
+
 export enum Limits {
   'unlimited' = 'unlimited',
 }
 
-type LimitAmount = number | Limits.unlimited;
+export type LimitAmount = number | 'unlimited';
 
 export interface AccountLimit {
-  submission_limit: LimitAmount | number;
-  nlp_seconds_limit: LimitAmount | number;
-  nlp_character_limit: LimitAmount | number;
-  storage_bytes_limit: LimitAmount | number;
+  submission_limit: LimitAmount;
+  nlp_seconds_limit: LimitAmount;
+  nlp_character_limit: LimitAmount;
+  storage_bytes_limit: LimitAmount;
 }
 
 export interface Product extends BaseProduct {

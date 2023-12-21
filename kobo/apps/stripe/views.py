@@ -4,6 +4,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Max, Prefetch
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
+from django_dont_vary_on.decorators import only_vary_on
 from djstripe import enums
 from djstripe.models import (
     Customer,
@@ -323,14 +324,14 @@ class CustomerPortalView(APIView):
             if not len(all_configs):
                 return Response({'error': "Missing Stripe billing configuration."}, status=status.HTTP_502_BAD_GATEWAY)
 
-            is_price_for_addon = price.product.metadata.get('product_type', '') == 'addon'
-
-            if is_price_for_addon:
-                """
-                Recurring add-ons aren't included in the default billing configuration.
-                This lets us hide them as an 'upgrade' option for paid plan users.
-                Here, we try getting the portal configuration that lets us switch to the provided price.
-                """
+            """
+            Recurring add-ons and the Enterprise plan aren't included in the default billing configuration.
+            This lets us hide them as an 'upgrade' option for paid plan users.
+            """
+            needs_custom_config = price.product.metadata.get('product_type', '') == 'addon'
+            needs_custom_config = needs_custom_config or price.product.metadata.get('plan_type', '') == 'enterprise'
+            if needs_custom_config:
+                # Try getting the portal configuration that lets us switch to the provided price
                 current_config = next(
                     (config for config in all_configs if (
                             config['active'] and
@@ -349,7 +350,7 @@ class CustomerPortalView(APIView):
                     )), None
                 )
 
-                if is_price_for_addon:
+                if needs_custom_config:
                     """
                     we couldn't find a custom configuration, let's try making a new one
                     add the price we're switching into to the list of prices that allow subscription updates
@@ -433,6 +434,7 @@ class SubscriptionViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 @method_decorator(cache_page(settings.ENDPOINT_CACHE_DURATION), name='list')
+@method_decorator(only_vary_on('Origin'), name='list')
 class ProductViewSet(viewsets.GenericViewSet, mixins.ListModelMixin):
     """
     Returns Product and Price Lists, sorted from the product with the lowest price to highest
