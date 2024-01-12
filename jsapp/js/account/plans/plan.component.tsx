@@ -14,7 +14,6 @@ import {
   postCheckout,
   postCustomerPortal,
 } from '../stripe.api';
-import Icon from 'js/components/common/icon';
 import Button from 'js/components/common/button';
 import classnames from 'classnames';
 import LoadingSpinner from 'js/components/common/loadingSpinner';
@@ -29,7 +28,6 @@ import subscriptionStore from 'js/account/subscriptionStore';
 import {when} from 'mobx';
 import {
   getSubscriptionsForProductId,
-  isChangeScheduled,
   processCheckoutResponse,
 } from 'js/account/stripe.utils';
 import type {
@@ -41,9 +39,11 @@ import type {
 } from 'js/account/stripe.types';
 import type {ConfirmChangeProps} from 'js/account/plans/confirmChangeModal.component';
 import ConfirmChangeModal from 'js/account/plans/confirmChangeModal.component';
-import {PlanButton} from 'js/account/plans/planButton.component';
+import Session from 'js/stores/session';
+import InlineMessage from 'js/components/common/inlineMessage';
+import {PlanContainer} from 'js/account/plans/planContainer.component';
 
-interface PlanState {
+export interface PlanState {
   subscribedProduct: null | SubscriptionInfo[];
   intervalFilter: string;
   filterToggle: boolean;
@@ -70,7 +70,7 @@ type DataUpdates =
       type: 'month' | 'year';
     };
 
-interface FreeTierOverride extends FreeTierThresholds {
+export interface FreeTierOverride extends FreeTierThresholds {
   name: string | null;
   [key: `feature_list_${number}`]: string | null;
 }
@@ -129,6 +129,8 @@ export default function Plan() {
     currentSubscription: null,
   });
   const [visiblePlanTypes, setVisiblePlanTypes] = useState(['default']);
+  const [session, setSession] = useState(() => Session);
+  const [isUnauthorized, setIsUnauthorized] = useState(false);
 
   const [searchParams] = useSearchParams();
   const didMount = useRef(false);
@@ -140,32 +142,15 @@ export default function Plan() {
     [state.products, state.organization, state.subscribedProduct]
   );
 
+  const isDisabled = useMemo(
+    () => isBusy || isUnauthorized,
+    [isBusy, isUnauthorized]
+  );
+
   const hasManageableStatus = useCallback(
     (subscription: SubscriptionInfo) =>
       ACTIVE_STRIPE_STATUSES.includes(subscription.status),
     []
-  );
-
-  const shouldShowManage = useCallback(
-    (product: Price) => {
-      const subscriptions = getSubscriptionsForProductId(
-        product.id,
-        state.subscribedProduct
-      );
-      if (!subscriptions || !subscriptions.length) {
-        return false;
-      }
-
-      const activeSubscription = subscriptions.find(
-        (subscription: SubscriptionInfo) => hasManageableStatus(subscription)
-      );
-      if (!activeSubscription) {
-        return false;
-      }
-
-      return isChangeScheduled(product.prices, [activeSubscription]);
-    },
-    [hasManageableStatus, state.subscribedProduct]
   );
 
   const freeTierOverride = useMemo((): FreeTierOverride | null => {
@@ -252,6 +237,16 @@ export default function Plan() {
     },
     [searchParams, shouldRevalidate]
   );
+
+  // we need to show a message and disable the page if the user is not the owner of their org
+  useEffect(() => {
+    if (
+      state.organization &&
+      state.organization.owner !== session.currentAccount.username
+    ) {
+      setIsUnauthorized(true);
+    }
+  }, [state.organization]);
 
   // Re-fetch data from API and re-enable buttons if displaying from back/forward cache
   useEffect(() => {
@@ -389,7 +384,7 @@ export default function Plan() {
   };
 
   const buySubscription = (price: BasePrice) => {
-    if (!price.id || isBusy || !state.organization?.id) {
+    if (!price.id || isDisabled || !state.organization?.id) {
       return;
     }
     setIsBusy(true);
@@ -417,34 +412,6 @@ export default function Plan() {
         .then(processCheckoutResponse)
         .catch(() => setIsBusy(false));
     }
-  };
-
-  // Get feature items and matching icon boolean
-  const getListItem = (listType: string, plan: string) => {
-    const listItems: Array<{icon: boolean; item: string}> = [];
-    filterPrices.map((price) =>
-      Object.keys(price.metadata).map((featureItem: string) => {
-        const numberItem = featureItem.lastIndexOf('_');
-        const currentResult = featureItem.substring(numberItem + 1);
-
-        const currentIcon = `feature_${listType}_check_${currentResult}`;
-        if (
-          featureItem.includes(`feature_${listType}_`) &&
-          !featureItem.includes(`feature_${listType}_check`) &&
-          price.name === plan
-        ) {
-          const keyName = `feature_${listType}_${currentResult}`;
-          let iconBool = false;
-          const itemName: string =
-            price.prices.metadata?.[keyName] || price.metadata[keyName];
-          if (price.metadata[currentIcon] !== undefined) {
-            iconBool = JSON.parse(price.metadata[currentIcon]);
-            listItems.push({icon: iconBool, item: itemName});
-          }
-        }
-      })
-    );
-    return listItems;
   };
 
   const hasMetaFeatures = () => {
@@ -481,53 +448,6 @@ export default function Plan() {
     hasMetaFeatures();
   }, [state.products]);
 
-  const renderFeaturesList = (
-    items: Array<{
-      icon: 'positive' | 'positive_pro' | 'negative';
-      label: string;
-    }>,
-    title?: string
-  ) => (
-    <div key={title}>
-      <h2 className={styles.listTitle}>{title} </h2>
-      <ul>
-        {items.map((item) => (
-          <li key={item.label}>
-            <div className={styles.iconContainer}>
-              {item.icon !== 'negative' ? (
-                <Icon
-                  name='check'
-                  size='m'
-                  color={item.icon === 'positive_pro' ? 'teal' : 'storm'}
-                />
-              ) : (
-                <Icon name='close' size='m' color='red' />
-              )}
-            </div>
-            {item.label}
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-
-  const returnListItem = (type: string, name: string, featureTitle: string) => {
-    const items: Array<{
-      icon: 'positive' | 'positive_pro' | 'negative';
-      label: string;
-    }> = [];
-    getListItem(type, name).map((listItem) => {
-      if (listItem.icon && name === 'Professional') {
-        items.push({icon: 'positive_pro', label: listItem.item});
-      } else if (!listItem.icon) {
-        items.push({icon: 'negative', label: listItem.item});
-      } else {
-        items.push({icon: 'positive', label: listItem.item});
-      }
-    });
-    return renderFeaturesList(items, featureTitle);
-  };
-
   if (!state.products?.length || !state.organization) {
     return null;
   }
@@ -537,197 +457,144 @@ export default function Plan() {
       {isDataLoading ? (
         <LoadingSpinner />
       ) : (
-        <div
-          className={classnames(styles.accountPlan, {
-            [styles.wait]: isBusy,
-          })}
-        >
-          <div className={styles.plansSection}>
-            <form className={styles.intervalToggle}>
-              <input
-                type='radio'
-                id='switch_left'
-                name='switchToggle'
-                value='month'
-                aria-label={t('show monthly plans')}
-                onChange={() => dispatch({type: 'month'})}
-                checked={state.filterToggle}
-              />
-              <label htmlFor='switch_left'> {t('Monthly')}</label>
-
-              <input
-                type='radio'
-                id='switch_right'
-                name='switchToggle'
-                value='year'
-                onChange={() => dispatch({type: 'year'})}
-                checked={!state.filterToggle}
-                aria-label={t('show annual plans')}
-              />
-              <label htmlFor='switch_right'>{t('Annual')}</label>
-            </form>
-
-            <div className={styles.allPlans}>
-              {filterPrices.map((price: Price) => (
-                <div className={styles.stripePlans} key={price.id}>
-                  {isSubscribedProduct(price) ? (
-                    <div className={styles.currentPlan}>{t('Your plan')}</div>
-                  ) : (
-                    <div />
-                  )}
-                  <div
-                    className={classnames({
-                      [styles.planContainerWithBadge]:
-                        isSubscribedProduct(price),
-                      [styles.planContainer]: true,
-                    })}
-                  >
-                    <h1 className={styles.priceName}>
-                      {price.prices?.unit_amount
-                        ? price.name
-                        : freeTierOverride?.name || price.name}
-                    </h1>
-                    <div className={styles.priceTitle}>
-                      {!price.prices?.unit_amount
-                        ? t('Free')
-                        : price.prices?.recurring?.interval === 'year'
-                        ? `$${(price.prices?.unit_amount / 100 / 12).toFixed(
-                            2
-                          )} USD/month`
-                        : price.prices.human_readable_price}
-                    </div>
-                    <ul className={styles.featureContainer}>
-                      {Object.keys(price.metadata).map(
-                        (featureItem: string) =>
-                          featureItem.includes('feature_list_') && (
-                            <li key={featureItem}>
-                              <div className={styles.iconContainer}>
-                                <Icon
-                                  name='check'
-                                  size='m'
-                                  color={
-                                    price.prices.unit_amount ? 'teal' : 'storm'
-                                  }
-                                />
-                              </div>
-                              {getFeatureMetadata(price, featureItem)}
-                            </li>
-                          )
-                      )}
-                    </ul>
-                    {expandComparison && (
-                      <div className={styles.expandedContainer}>
-                        <hr />
-                        {state.featureTypes.map((type, index, array) => {
-                          const featureItem = getListItem(type, price.name);
-                          return (
-                            featureItem.length > 0 && [
-                              returnListItem(
-                                type,
-                                price.name,
-                                price.metadata[`feature_${type}_title`]
-                              ),
-                              index !== array.length - 1 && (
-                                <hr key={`hr-${type}`} />
-                              ),
-                            ]
-                          );
-                        })}
-                      </div>
-                    )}
-                    <PlanButton
-                      price={price}
-                      downgrading={
-                        activeSubscriptions?.length > 0 &&
-                        activeSubscriptions?.[0].items?.[0].price.unit_amount >
-                          price.prices.unit_amount
-                      }
-                      isSubscribedToPlan={isSubscribedProduct(price)}
-                      buySubscription={buySubscription}
-                      showManage={shouldShowManage(price)}
-                      isBusy={isBusy}
-                      setIsBusy={setIsBusy}
-                      organization={state.organization}
-                    />
-                  </div>
-                </div>
-              ))}
-              {shouldShowExtras && (
-                <div className={styles.enterprisePlanContainer}>
-                  <div className={styles.enterprisePlan}>
-                    <h1 className={styles.enterpriseTitle}>
-                      {' '}
-                      {t('Want more?')}
-                    </h1>
-                    <div className={styles.priceTitle}>{t('Contact us')}</div>
-                    <p className={styles.enterpriseDetails}>
-                      {t(
-                        'For organizations with higher volume and advanced data collection needs, get in touch to learn more about our '
-                      )}
-                      <a
-                        href='https://www.kobotoolbox.org/contact/'
-                        target='_blanks'
-                        className={styles.enterpriseLink}
-                      >
-                        {t('Enterprise Plan')}
-                      </a>
-                      .
-                    </p>
-                    <p className={styles.enterpriseDetails}>
-                      {t(
-                        'We also offer custom solutions and private servers for large organizations. '
-                      )}
-                      <br />
-                      <a
-                        href='https://www.kobotoolbox.org/contact/'
-                        target='_blanks'
-                        className={styles.enterpriseLink}
-                      >
-                        {t('Contact our team')}
-                      </a>
-                      {t(' for more information.')}
-                    </p>
-                  </div>
-                </div>
+        <>
+          {isUnauthorized && (
+            <InlineMessage
+              classNames={[styles.sticky]}
+              message={t(
+                'Please contact your organization owner for any changes to your plan or add-ons.'
               )}
-            </div>
-          </div>
-
-          {hasMetaFeatures() && (
-            <div>
-              <Button
-                type='full'
-                color='cloud'
-                size='m'
-                isFullWidth
-                label={
-                  expandComparison
-                    ? t('Collapse full comparison')
-                    : t('Display full comparison')
-                }
-                onClick={() => setExpandComparison(!expandComparison)}
-                aria-label={
-                  expandComparison
-                    ? t('Collapse full comparison')
-                    : t('Display full comparison')
-                }
-              />
-            </div>
-          )}
-          {shouldShowExtras && (
-            <AddOnList
-              isBusy={isBusy}
-              setIsBusy={setIsBusy}
-              products={state.products}
-              organization={state.organization}
-              onClickBuy={buySubscription}
+              type={'warning'}
             />
           )}
-          <ConfirmChangeModal
-            onRequestClose={dismissConfirmModal}
-            {...confirmModal}
-          />
-        </div>
+          <div
+            className={classnames(styles.accountPlan, {
+              [styles.wait]: isBusy,
+              [styles.unauthorized]: isUnauthorized,
+            })}
+          >
+            <div className={styles.plansSection}>
+              <form className={styles.intervalToggle}>
+                <input
+                  type='radio'
+                  id='switch_left'
+                  name='switchToggle'
+                  value='month'
+                  aria-label={t('show monthly plans')}
+                  onChange={() => !isDisabled && dispatch({type: 'month'})}
+                  aria-disabled={isDisabled}
+                  checked={state.filterToggle}
+                />
+                <label htmlFor='switch_left'> {t('Monthly')}</label>
+
+                <input
+                  type='radio'
+                  id='switch_right'
+                  name='switchToggle'
+                  value='year'
+                  onChange={() => !isDisabled && dispatch({type: 'year'})}
+                  aria-disabled={isDisabled}
+                  checked={!state.filterToggle}
+                  aria-label={t('show annual plans')}
+                />
+                <label htmlFor='switch_right'>{t('Annual')}</label>
+              </form>
+
+              <div className={styles.allPlans}>
+                {filterPrices.map((price: Price) => (
+                  <div className={styles.stripePlans} key={price.id}>
+                    <PlanContainer
+                      freeTierOverride={freeTierOverride}
+                      expandComparison={expandComparison}
+                      isSubscribedProduct={isSubscribedProduct}
+                      price={price}
+                      filterPrices={filterPrices}
+                      hasManageableStatus={hasManageableStatus}
+                      setIsBusy={setIsBusy}
+                      isDisabled={isDisabled}
+                      state={state}
+                      buySubscription={buySubscription}
+                      activeSubscriptions={activeSubscriptions}
+                    />
+                  </div>
+                ))}
+                {shouldShowExtras && (
+                  <div className={styles.enterprisePlanContainer}>
+                    <div className={styles.enterprisePlan}>
+                      <h1 className={styles.enterpriseTitle}>
+                        {' '}
+                        {t('Want more?')}
+                      </h1>
+                      <div className={styles.priceTitle}>{t('Contact us')}</div>
+                      <p className={styles.enterpriseDetails}>
+                        {t(
+                          'For organizations with higher volume and advanced data collection needs, get in touch to learn more about our '
+                        )}
+                        <a
+                          href='https://www.kobotoolbox.org/contact/'
+                          target='_blanks'
+                          className={styles.enterpriseLink}
+                        >
+                          {t('Enterprise Plan')}
+                        </a>
+                        .
+                      </p>
+                      <p className={styles.enterpriseDetails}>
+                        {t(
+                          'We also offer custom solutions and private servers for large organizations. '
+                        )}
+                        <br />
+                        <a
+                          href='https://www.kobotoolbox.org/contact/'
+                          target='_blanks'
+                          className={styles.enterpriseLink}
+                        >
+                          {t('Contact our team')}
+                        </a>
+                        {t(' for more information.')}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {hasMetaFeatures() && (
+              <div>
+                <Button
+                  type='full'
+                  color='cloud'
+                  size='m'
+                  isFullWidth
+                  label={
+                    expandComparison
+                      ? t('Collapse full comparison')
+                      : t('Display full comparison')
+                  }
+                  onClick={() => setExpandComparison(!expandComparison)}
+                  aria-label={
+                    expandComparison
+                      ? t('Collapse full comparison')
+                      : t('Display full comparison')
+                  }
+                />
+              </div>
+            )}
+            {shouldShowExtras && (
+              <AddOnList
+                isBusy={isBusy}
+                setIsBusy={setIsBusy}
+                products={state.products}
+                organization={state.organization}
+                onClickBuy={buySubscription}
+              />
+            )}
+            <ConfirmChangeModal
+              onRequestClose={dismissConfirmModal}
+              {...confirmModal}
+            />
+          </div>
+        </>
       )}
     </>
   );

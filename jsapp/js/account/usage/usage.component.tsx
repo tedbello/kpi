@@ -12,7 +12,6 @@ import UsageContainer, {
 import envStore from 'js/envStore';
 import {formatDate} from 'js/utils';
 import styles from './usage.module.scss';
-import LimitNotifications from 'js/components/usageLimits/limitNotifications.component';
 import useWhenStripeIsEnabled from 'js/hooks/useWhenStripeIsEnabled.hook';
 import {UsageContext, useUsage} from 'js/account/usage/useUsage.hook';
 import moment from 'moment';
@@ -130,7 +129,6 @@ export default function Usage() {
             </p>
           )}
         </header>
-        <LimitNotifications usagePage />
         <div className={styles.row}>
           <div className={cx(styles.row, styles.subrow)}>
             <div className={styles.box}>
