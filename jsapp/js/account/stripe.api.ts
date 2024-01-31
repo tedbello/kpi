@@ -10,9 +10,12 @@ import type {
   ChangePlan,
   Checkout,
   Organization,
+  PriceMetadata,
   Product,
+  TransformQuantity,
 } from 'js/account/stripe.types';
 import {Limits} from 'js/account/stripe.types';
+import {getAdjustedQuantityForPrice} from 'js/account/stripe.utils';
 
 const DEFAULT_LIMITS: AccountLimit = Object.freeze({
   submission_limit: Limits.unlimited,
@@ -29,10 +32,11 @@ export async function getProducts() {
 
 export async function changeSubscription(
   priceId: string,
-  subscriptionId: string
+  subscriptionId: string,
+  quantity = 1
 ) {
   return fetchGet<ChangePlan>(
-    `${endpoints.CHANGE_PLAN_URL}?price_id=${priceId}&subscription_id=${subscriptionId}`,
+    `${endpoints.CHANGE_PLAN_URL}?price_id=${priceId}&subscription_id=${subscriptionId}&quantity=${quantity}`,
     {
       errorMessageDisplay: t(
         "We couldn't make the requested change to your plan.\nYour current plan has not been changed."
@@ -50,9 +54,13 @@ export async function getOrganization() {
 /**
  * Start a checkout session for the given price and organization. Response contains the checkout URL.
  */
-export async function postCheckout(priceId: string, organizationId: string) {
+export async function postCheckout(
+  priceId: string,
+  organizationId: string,
+  quantity = 1
+) {
   return fetchPost<Checkout>(
-    `${endpoints.CHECKOUT_URL}?price_id=${priceId}&organization_id=${organizationId}`,
+    `${endpoints.CHECKOUT_URL}?price_id=${priceId}&organization_id=${organizationId}&quantity=${quantity}`,
     {},
     {
       errorMessageDisplay:
@@ -64,9 +72,13 @@ export async function postCheckout(priceId: string, organizationId: string) {
 /**
  * Get the URL of the Stripe customer portal for an organization.
  */
-export async function postCustomerPortal(organizationId: string, priceId?: string) {
+export async function postCustomerPortal(
+  organizationId: string,
+  priceId: string = '',
+  quantity = 1
+) {
   return fetchPost<Checkout>(
-    `${endpoints.PORTAL_URL}?organization_id=${organizationId}&price_id=${priceId || ''}`,
+    `${endpoints.PORTAL_URL}?organization_id=${organizationId}&price_id=${priceId}&quantity=${quantity}`,
     {},
     {
       errorMessageDisplay:
@@ -102,14 +114,18 @@ export async function getSubscriptionInterval() {
  * Will only return limits that exceed the ones in `limitsToCompare`, or all limits if `limitsToCompare` is not present.
  */
 function getLimitsForMetadata(
-  metadata: {[key: string]: string},
+  metadata: PriceMetadata,
   limitsToCompare: false | AccountLimit = false
 ) {
   const limits: Partial<AccountLimit> = {};
+  const quantity = getAdjustedQuantityForPrice(
+    parseInt(metadata['quantity']),
+    metadata.transform_quantity
+  );
   for (const [key, value] of Object.entries(metadata)) {
     // if we need to compare limits, make sure we're not overwriting a higher limit from somewhere else
     if (limitsToCompare) {
-      if (!(key in limitsToCompare)) {
+      if (!(key in limitsToCompare) || value === null) {
         continue;
       }
       if (
@@ -121,9 +137,10 @@ function getLimitsForMetadata(
       }
     }
     // only use metadata needed for limit calculations
-    if (key in DEFAULT_LIMITS) {
+    if (key in DEFAULT_LIMITS && value !== null) {
+      const numericValue = parseInt(value as string);
       limits[key as keyof AccountLimit] =
-        value === Limits.unlimited ? Limits.unlimited : parseInt(value);
+        value === Limits.unlimited ? Limits.unlimited : numericValue * quantity;
     }
   }
   return limits;
@@ -158,20 +175,20 @@ const getFreeTierLimits = async (limits: AccountLimit) => {
 const getRecurringAddOnLimits = (limits: AccountLimit) => {
   let newLimits = {...limits};
   let activeAddOns = [...subscriptionStore.addOnsResponse];
-  let metadata = {};
+  let metadata: PriceMetadata;
   // only check active add-ons
   activeAddOns = activeAddOns.filter((subscription) =>
     ACTIVE_STRIPE_STATUSES.includes(subscription.status)
   );
-  if (activeAddOns.length) {
-    activeAddOns.forEach((addOn) => {
-      metadata = {
-        ...addOn.items[0].price.product.metadata,
-        ...addOn.items[0].price.metadata,
-      };
-      newLimits = {...newLimits, ...getLimitsForMetadata(metadata, newLimits)};
-    });
-  }
+  activeAddOns.forEach((addOn) => {
+    metadata = {
+      ...addOn.items[0].price.product.metadata,
+      ...addOn.items[0].price.metadata,
+      quantity: activeAddOns[0].quantity.toString(),
+      transform_quantity: activeAddOns[0].items[0].price.transform_quantity,
+    };
+    newLimits = {...newLimits, ...getLimitsForMetadata(metadata, newLimits)};
+  });
   return newLimits;
 };
 
@@ -185,13 +202,16 @@ const getStripeMetadataAndFreeTierStatus = async () => {
   const activeSubscriptions = plans.filter((subscription) =>
     ACTIVE_STRIPE_STATUSES.includes(subscription.status)
   );
-  let metadata;
+  let metadata: PriceMetadata;
   let hasFreeTier = false;
   if (activeSubscriptions.length) {
     // get metadata from the user's subscription (prioritize price metadata over product metadata)
     metadata = {
       ...activeSubscriptions[0].items[0].price.product.metadata,
       ...activeSubscriptions[0].items[0].price.metadata,
+      transform_quantity:
+        activeSubscriptions[0].items[0].price.transform_quantity,
+      quantity: activeSubscriptions[0].quantity.toString(),
     };
   } else {
     // the user has no subscription, so get limits from the free monthly product
@@ -207,10 +227,12 @@ const getStripeMetadataAndFreeTierStatus = async () => {
       metadata = {
         ...freeProduct.metadata,
         ...freeProduct.prices[0].metadata,
+        transform_quantity: null,
+        quantity: '1',
       };
     } catch (error) {
       // couldn't find the free monthly product, continue in case we have limits to display from the free tier override
-      metadata = {};
+      metadata = {transform_quantity: null, quantity: '1'};
     }
   }
   return {metadata, hasFreeTier};
