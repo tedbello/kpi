@@ -44,6 +44,7 @@ class TestCustomerPortalAPITestCase(BaseTestCase):
                 Subscription,
                 status='active',
                 customer=self.customer,
+                items__price=self.price
             )
 
     def _get_url_for_expected_request(self, create_subscription=True, product_type='plan'):
@@ -162,4 +163,4 @@ class TestCustomerPortalAPITestCase(BaseTestCase):
         url = self._get_url_for_expected_request()
         self.client.logout()
         response = self.client.post(url)
-        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED

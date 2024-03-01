@@ -3,7 +3,7 @@ import {when} from 'mobx';
 import {ACTIVE_STRIPE_STATUSES} from 'js/constants';
 import envStore from 'js/envStore';
 import {
-  BasePrice,
+  Price,
   BaseProduct,
   ChangePlan,
   Checkout,
@@ -90,7 +90,7 @@ export async function processChangePlanResponse(data: ChangePlan) {
  * Check if any of a list of subscriptions are scheduled to change to a given price at some point.
  */
 export function isChangeScheduled(
-  price: BasePrice,
+  price: Price,
   subscriptions: SubscriptionInfo[] | null
 ) {
   return (
@@ -190,4 +190,28 @@ export const getAdjustedQuantityForPrice = (
     adjustedQuantity = Math.floor(adjustedQuantity);
   }
   return adjustedQuantity;
+};
+
+/**
+ * Tests whether a new price/quantity would cost less than the user's current subscription.
+ */
+export const isDowngrade = (
+  currentSubscriptions: SubscriptionInfo[],
+  price: Price,
+  newQuantity: number
+) => {
+  if (!currentSubscriptions.length) {
+    return false;
+  }
+  const subscriptionItem = currentSubscriptions[0].items[0];
+  const currentTotalPrice =
+    subscriptionItem.price.unit_amount *
+    getAdjustedQuantityForPrice(
+      subscriptionItem.quantity,
+      subscriptionItem.price.transform_quantity
+    );
+  const newTotalPrice =
+    price.unit_amount *
+    getAdjustedQuantityForPrice(newQuantity, price.transform_quantity);
+  return currentTotalPrice > newTotalPrice;
 };
