@@ -24,6 +24,8 @@
 // -- This will overwrite an existing command --
 // Cypress.Commands.overwrite('visit', (originalFn, url, options) => { ... })
 
+const { NewProjectModal } = require("../e2e/pom/newProjectModalPage")
+
 Cypress.Commands.add('setupDatabase', () => {
     cy.log('setupDatabase not functional')
 })
@@ -34,6 +36,27 @@ Cypress.Commands.add('login', (account, name) => {
     cy.get('input[name="password"]').type(account.password)
     cy.get('button[type="submit"]').click()
 })
+
+
+Cypress.Commands.add('getByDataCy', (selector) => {
+    return cy.get(`[data-cy=${selector}]`)
+})
+
+Cypress.Commands.add('openMenu', () => {
+    cy.get('button[class*="mainHeader-module" ]').click();
+})
+
+Cypress.Commands.add('CreateNewProject', (type) => {
+    cy.get('.form-sidebar-wrapper > .k-button').click(); // NEW Button
+
+    switch (type.toLowerCase()) {
+        case 'build from scratch':        cy.get('.form-modal__item > :nth-child(1)').click(); break;//
+        // case 'use a template':            cy.get('.form-modal__item > :nth-child(2)').click; break;; //
+        // case 'upload an xslform':         cy.get('.form-modal__item > :nth-child(3)').click; break;; //
+        // case 'import an xslform via url': cy.get('.form-modal__item > :nth-child(4)').click; break;; //    
+    }
+})
+
 
 // Makes this case insensitive by default
 Cypress.Commands.overwriteQuery('contains', (originalFn, subject, filter, text, options = {}) => {

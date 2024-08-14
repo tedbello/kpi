@@ -1,3 +1,7 @@
+ /// <reference types="cypress" /> 
+
+import {NewProjectModal} from "../pom/newProjectModalPage";
+
 
 describe('super_admin can create New Project.', function () {
     before(() => {
@@ -8,8 +12,9 @@ describe('super_admin can create New Project.', function () {
         })
     })
 
-it('Creates a Form', function () {
-
-    cy.contains('NEW').should('exist')
+    it('Creates a new project from scratch', function () {
+        cy.openMenu();
+        cy.CreateNewProject('Build from scratch');     
+    })
 
 });
