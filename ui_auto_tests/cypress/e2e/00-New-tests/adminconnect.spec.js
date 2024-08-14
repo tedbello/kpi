@@ -17,4 +17,9 @@ describe('super_admin can create New Project.', function () {
         cy.CreateNewProject('Build from scratch');     
     })
 
+    it('Creates a new project from scratch', function () {
+        cy.openMenu();
+        cy.CreateNewProject('Build from scratch');     
+    })
+
 });
