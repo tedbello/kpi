@@ -1,0 +1,8 @@
+{
+    "project_admin" : {
+        "projectName": "admin-Project-Name",
+        "description": "admin-Project",
+        "sector": "Public Administration",
+        "country": "Canada"        
+    }
+}

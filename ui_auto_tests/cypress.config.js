@@ -6,6 +6,8 @@ module.exports = defineConfig({
       // implement node event listeners here
     },
 
+    //video: true,
+
     baseUrl: 'http://kf.kobo.local/',
     watchForFileChanges:false,
     defaultCommandTimeout: 6000,

@@ -24,39 +24,52 @@
 // -- This will overwrite an existing command --
 // Cypress.Commands.overwrite('visit', (originalFn, url, options) => { ... })
 
-const { NewProjectModal } = require("../e2e/pom/newProjectModalPage")
+//const { NewProjectModal } = require("../e2e/pom/newProjectModalPage")
 
 Cypress.Commands.add('setupDatabase', () => {
     cy.log('setupDatabase not functional')
 })
 
-Cypress.Commands.add('login', (account, name) => {
-    cy.visit('/accounts/login/')
-    cy.get('input[name="login"]').type(name)
-    cy.get('input[name="password"]').type(account.password)
-    cy.get('button[type="submit"]').click()
-})
-
-
 Cypress.Commands.add('getByDataCy', (selector) => {
     return cy.get(`[data-cy=${selector}]`)
 })
 
+Cypress.Commands.add('getByDocumentSelector', (selector) => {
+    return cy.get(`${selector}`)
+})
+
+Cypress.Commands.add('login', (account, name) => {
+    cy.visit('/accounts/login/')
+    cy.getByDocumentSelector('input[name="login"]').type(name)
+    cy.getByDocumentSelector('input[name="password"]').type(account.password)
+    cy.getByDocumentSelector('button[type="submit"]').click()
+})
+
 Cypress.Commands.add('openMenu', () => {
-    cy.get('button[class*="mainHeader-module" ]').click();
+    cy.getByDocumentSelector('button[class*="mainHeader-module" ]').click();
+    cy.wait(2000);
 })
 
-Cypress.Commands.add('CreateNewProject', (type) => {
-    cy.get('.form-sidebar-wrapper > .k-button').click(); // NEW Button
+Cypress.Commands.add('createNewProject', () => { 
+    cy.log('Click "NEW" button to create a new project');
+    cy.getByDocumentSelector('.form-sidebar-wrapper > .k-button').click(); // NEW Button
 
+    cy.url('pathname').should('include', '/#/projects/home')    
+})
+
+Cypress.Commands.add('selectNewProjectType', (type) => { 
+
+    cy.log('selecting "Build project from scratch"');
+    
     switch (type.toLowerCase()) {
-        case 'build from scratch':        cy.get('.form-modal__item > :nth-child(1)').click(); break;//
-        // case 'use a template':            cy.get('.form-modal__item > :nth-child(2)').click; break;; //
-        // case 'upload an xslform':         cy.get('.form-modal__item > :nth-child(3)').click; break;; //
-        // case 'import an xslform via url': cy.get('.form-modal__item > :nth-child(4)').click; break;; //    
+        case 'build from scratch':        cy.getByDocumentSelector('.form-modal__item > :nth-child(1)').click(); break;//        
+        case 'use a template':            cy.getByDocumentSelector('.form-modal__item > :nth-child(2)').click(); break;; //
+        case 'upload an xslform':         cy.getByDocumentSelector('.form-modal__item > :nth-child(3)').click(); break;; //
+        case 'import an xslform via url': cy.getByDocumentSelector('.form-modal__item > :nth-child(4)').click(); break;; //    
     }
+    cy.wait(3000); //debug
 })
-
+    
 
 // Makes this case insensitive by default
 Cypress.Commands.overwriteQuery('contains', (originalFn, subject, filter, text, options = {}) => {
