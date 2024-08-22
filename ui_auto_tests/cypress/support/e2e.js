@@ -29,6 +29,22 @@ before(() => { // run once before all tests
     cy.setupDatabase()
 })
 
+before('Creating test accounts', () => { 
+    cy.fixture(user_accounts)
+    .then(users => {
+        users.forEach(user => {
+            cy.log(`fullName:${user.fullName} - username: ${user.username} - email": ${user.email}" - password: ${user.password}`);
+            //cy.CreateTestUser_api(user); //Rest call
+            //cy.CreateTestUser_ui(user); //Cypress function in commands.js
+        });
+    })
+})
+
+After('Delete users', () => {
+    //Rest api possible
+    // UI - Cypress function in command.js
+});
+
 afterEach(() => { // run after every test
     cy.log('Test complete.')
 })
