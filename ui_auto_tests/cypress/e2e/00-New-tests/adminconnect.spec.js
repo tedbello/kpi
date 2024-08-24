@@ -6,7 +6,7 @@ const projectModal = new NewProjectSettingModal();
 
 describe('super_admin can create New Project.', function () {
     before(() => {
-        cy.viewport(1280, 720);
+        cy.viewport(1440, 900);
         cy.fixture('accounts')
         .then((accounts) => accounts.super_admin)
         .then(($acct) => {
