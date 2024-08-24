@@ -26,6 +26,9 @@
 
 //const { NewProjectModal } = require("../e2e/pom/newProjectModalPage")
 
+import {createAnAccountPage} from '../e2e/pom/createAnAccountPage';
+
+
 Cypress.Commands.add('setupDatabase', () => {
     cy.log('setupDatabase not functional')
 })
@@ -37,6 +40,21 @@ Cypress.Commands.add('getByDataCy', (selector) => {
 Cypress.Commands.add('getByDocumentSelector', (selector) => {
     return cy.get(`${selector}`)
 })
+
+Cypress.Commands.add('addNewAccount_ui', (user) => {
+    cy.visit('/accounts/login/');
+
+    const newAccountPage = new createAnAccountPage();
+    //newAccountPage.createNewAccount(user); // Need to delete account before recreate it
+
+    // NEED TO DELETE AND RECREATE ACCOUNT IN ORDER TO CONFIRM
+    //DEBUG
+    //cy.visit('/accounts/confirm-email/'); 
+    // cy.url('pathname').should('include', '/accounts/confirm-email/');
+    // cy.get('h1').should('be.visible').and('have.text','Confirm your email address');
+    // cy.get('p.registration__message--complete').should('contain', 'Please click the activation link in the email just sent to you.')
+})
+
 
 Cypress.Commands.add('login', (account, name) => {
     cy.visit('/accounts/login/')

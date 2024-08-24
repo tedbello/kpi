@@ -15,7 +15,6 @@
 
 // Import commands.js using ES2015 syntax:
 import './commands'
-
 // Alternatively you can use CommonJS syntax:
 // require('./commands')
 
@@ -25,25 +24,31 @@ import './commands'
 //   return false
 // })
 
-before(() => { // run once before all tests
-    cy.setupDatabase()
-})
 
-before('Creating test accounts', () => { 
-    cy.fixture(user_accounts)
+// before(() => { // run once before all tests
+//     cy.setupDatabase()
+// })
+
+before('Setup: Creating test accounts', () => { 
+    cy.viewport(1280, 720);
+    cy.fixture('user_accounts')
     .then(users => {
         users.forEach(user => {
-            cy.log(`fullName:${user.fullName} - username: ${user.username} - email": ${user.email}" - password: ${user.password}`);
-            //cy.CreateTestUser_api(user); //Rest call
-            //cy.CreateTestUser_ui(user); //Cypress function in commands.js
+            cy.log(`-> fullName:${user.fullname} -> username: ${user.username} -> email: ${user.email} -> password: ${user.password}`);
+
+            //By Rest call (HOWTO? ASK JNM)
+            //cy.addNewAccount_api(user);
+
+            //By UI  (See in commands.js)
+            cy.addNewAccount_ui(user); 
         });
     })
 })
 
-After('Delete users', () => {
-    //Rest api possible
-    // UI - Cypress function in command.js
-});
+// // After('Delete users', () => {
+// //     //Rest api possible
+// //     // UI - Cypress function in command.js
+// // });
 
 afterEach(() => { // run after every test
     cy.log('Test complete.')
