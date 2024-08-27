@@ -41,8 +41,38 @@ Cypress.Commands.add('getByDocumentSelector', (selector) => {
     return cy.get(`${selector}`)
 })
 
+Cypress.Commands.add('getByTextContent', (text) => {
+    return cy.contains(`${text}`)
+})
+
+Cypress.Commands.add('waitForSpinnerToDisappear', (maxAttempts = 10, attempt = 1) => {
+    cy.get('body').then($body => {
+        if ($body.find('.k-spin').length > 0) {
+            if (attempt >= maxAttempts) {
+                throw new Error(`Spinner with selector "${'.k-spin'}" did not disappear after ${maxAttempts} attempts.`);
+            }
+        cy.wait(2000); // Wait for 0.5 seconds before retrying
+        cy.waitForSpinnerToDisappear(maxAttempts, attempt + 1);
+        }
+    });
+});
+
+Cypress.Commands.add('waitUntilLoadingSpinnerToFinish', () => {
+    cy.log('Waiting for the page to load ...');
+    cy.getByDocumentSelector('.k-spin', { timeout: 10000 })
+    .then($spinner => {
+        if($spinner.is(':visible')){
+            cy.wait(500);
+            cy.getByDocumentSelector('.k-spin', { timeout: 10000 }).should('not.exist');
+        }
+        else
+            cy.waitUntilLoadingSpinnerToFinish();
+
+    })
+})
+
 Cypress.Commands.add('addNewAccount_ui', (user) => {
-    cy.visit('/accounts/login/');
+    //cy.visit('/accounts/login/');
 
     const newAccountPage = new createAnAccountPage();
     //newAccountPage.createNewAccount(user); // Need to delete account before recreate it
