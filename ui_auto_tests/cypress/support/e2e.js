@@ -40,7 +40,7 @@ before('Setup: Creating test accounts', () => {
             //cy.addNewAccount_api(user);
 
             //By UI  (See in commands.js)
-            cy.addNewAccount_ui(user); 
+            //cy.addNewAccount_ui(user); 
         });
     })
 })
