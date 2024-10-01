@@ -11,11 +11,6 @@ export class ListOfSurveyPage {
     }
 
     OpenSurveyByName(name){        
-        this.PAGE_SELECTORS.listOfSurveys()
-        .each(($el, index, $lst) => {
-            if($el.text().includes(name)){
-                cy.wrap($el).click();
-            }
-        });
+        this.PAGE_SELECTORS.listOfSurveys().filter(`:contains(${name})`).click();
     }
 }//Class

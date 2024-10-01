@@ -45,7 +45,36 @@ Cypress.Commands.add('getByTextContent', (text) => {
     return cy.contains(`${text}`)
 })
 
+Cypress.Commands.add('waitForElement', (selector, timeout = 10000) => {
+    cy.log('Waiting for an element to complete and page to load ...');
+    let interval = 1000; // Check every 1 second
+    let maxRetries = timeout / interval;
+    let retries = 0;
+
+    function checkElement() {
+        cy.get('body').then(($body) => {
+            if ($body.find(selector).length > 0) {
+                cy.get(selector).scrollIntoView().should('be.visible'); // Element exists, proceed
+            }
+            else if (retries < maxRetries) {
+                // Log the remaining time
+                let remainingTime = (maxRetries - retries) * interval / 1000;
+                cy.log(`Waiting for element. Time remaining: ${remainingTime} seconds`);
+                retries++;
+                // Retry after interval
+                cy.wait(interval).then(checkElement);
+            } 
+            else {
+                throw new Error(`Element ${selector} did not appear within ${timeout / 1000} seconds`);
+            }
+        });
+    }
+
+    checkElement();
+});
+
 Cypress.Commands.add('waitForSpinnerToDisappear', (maxAttempts = 10, attempt = 1) => {
+    cy.log('Waiting for the page to load ...');
     cy.get('body').then($body => {
         if ($body.find('.k-spin').length > 0) {
             if (attempt >= maxAttempts) {
@@ -59,11 +88,11 @@ Cypress.Commands.add('waitForSpinnerToDisappear', (maxAttempts = 10, attempt = 1
 
 Cypress.Commands.add('waitUntilLoadingSpinnerToFinish', () => {
     cy.log('Waiting for the page to load ...');
-    cy.getByDocumentSelector('.k-spin', { timeout: 10000 })
+    cy.getByDocumentSelector('.k-spin', { timeout: 3000 })
     .then($spinner => {
         if($spinner.is(':visible')){
             cy.wait(500);
-            cy.getByDocumentSelector('.k-spin', { timeout: 10000 }).should('not.exist');
+            cy.getByDocumentSelector('.k-spin', { timeout: 3000 }).should('not.exist');
         }
         else
             cy.waitUntilLoadingSpinnerToFinish();
@@ -91,6 +120,8 @@ Cypress.Commands.add('login', (account, name) => {
     cy.getByDocumentSelector('input[name="login"]').type(name)
     cy.getByDocumentSelector('input[name="password"]').type(account.password)
     cy.getByDocumentSelector('button[type="submit"]').click()
+
+    cy.waitUntilLoadingSpinnerToFinish();
 })
 
 Cypress.Commands.add('openMenu', () => {
