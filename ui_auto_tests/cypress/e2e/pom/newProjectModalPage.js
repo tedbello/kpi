@@ -1,51 +1,68 @@
 export class NewProjectSettingModal {
 
     /** **/
-    constructor() {       
+    constructor() {
     }
 
     MODAL_SELECTORS = {
-        modalMain_Pane:  () => cy.getByDataCy('modal__content'),
+        modalMain_Pane: () => cy.getByDataCy('modal__content'),
         modalPaneHeader: () => cy.getByDataCy('modal__header > modal__title'),
-        modalPaneClose:  () => cy.getByDataCy('modal__header > a'),
+        modalPaneClose: () => cy.getByDataCy('modal__header > a'),
 
-        modalBodyPaneForm:  () => cy.getByDataCy('project-settings.project-settings--project-details'),
+        modalBodyPaneForm: () => cy.getByDataCy('project-settings.project-settings--project-details'),
 
-        projectName:   () => cy.getByDataCy('title'),
-        description:   () => cy.getByDataCy('description'),
-        sector:        () => cy.getByDataCy('sector'),
-        country:       () => cy.getByDataCy('country'),
-        back:          () => cy.getByDataCy('button[type="button"]').contains('Back'),
-        createProject: () => cy.getByDataCy('button[type="submit"]').contains('Create project'),
-        }
+        buildProjectFrom: (type) => cy.getByDocumentSelector(".form-modal__item button").filter(`:contains(${type})`),
 
-    createNewProjectwithSetting(){
-        cy.wait(5000)   // Weird application behavior!
-        cy.fixture('projects')
-            .then(($projectSetting) => {
-                this.MODAL_SELECTORS.projectName().type($projectSetting.project_admin.projectName);
-                this.MODAL_SELECTORS.description().type($projectSetting.project_admin.description);
-                
-                this.MODAL_SELECTORS.sector().click();  
-                cy.get('*[id^=react-select-2-option]')
-                .then((options) => {
-                    const targetItem = [...options].find((el) => el.innerText === $projectSetting.project_admin.sector);  
-                    if (targetItem) {
-                        cy.wrap(targetItem).click();
-                    }
-                })
-                
-                this.MODAL_SELECTORS.country().click();
-                cy.get('*[id^=react-select-3-option-]')
-                .then((options) => {
-                    const targetItem = [...options].find((el) => el.innerText === $projectSetting.project_admin.country);  
-                    if (targetItem) {
-                        cy.wrap(targetItem).click();
-                    }
-                })
-            });
+        projectTitle: () => cy.getByDataCy('title'),
+        projectDescription: () => cy.getByDataCy('description'),
+        projectSector: () => cy.getByDataCy('sector'),
+        projectCountry: () => cy.getByDataCy('country'),
+        back_btn: () => cy.getByDocumentSelector('button.k-button label.k-button__label').filter(':contains("Back")'),
+        createProject_btn: () => cy.getByDocumentSelector('button.k-button label.k-button__label').filter(':contains("Create project")'),
 
-        //this.MODAL_SELECTORS.createProject().click();
+        returnToMainList_link: () => cy.getByDocumentSelector('.left-tooltip.form-builder-header__cell'),
+
+        saveNewPrj_btn: () => cy.getByDocumentSelector('button.k-button label.k-button__label').filter(':contains("save")'),
+        closeNewPrj_btn: () => cy.getByDocumentSelector('button.k-button i.k-icon-close'),
     }
-    
+
+    createProjectByTypeName(type) {
+        cy.get('form.project-settings.project-settings--form-source').then(($form) => {
+            $form.on('submit', (e) => {
+                e.preventDefault();  // Prevent Cypress from submitting the form
+            });
+        });
+
+        this.MODAL_SELECTORS.buildProjectFrom(type).should('exist').click();
+        cy.waitForElement('.modal__content .modal__title');
+    }
+
+    fillInProjectTitle(title) {
+        this.MODAL_SELECTORS.projectTitle().should('exist').type(title);
+    }
+
+    fillInProjectDescription(description) {
+        this.MODAL_SELECTORS.projectDescription().should('exist').type(description)
+    }
+
+    selectProjectSector(sector) {
+        this.MODAL_SELECTORS.projectSector().should('exist').click().type(sector)
+        cy.get('[id^=react-select-2-option]').click();
+    }
+
+    selectProjectCountry(country) {
+        this.MODAL_SELECTORS.projectCountry().should('exist').click().type(country)
+        cy.get('[id^=react-select-3-option]').eq(0).click();
+    }
+
+    submitCreateNewProject() {
+        this.MODAL_SELECTORS.createProject_btn().should('not.be.disabled').click();
+        cy.waitForElement('.left-tooltip.form-builder-header__cell');
+    }
+
+    CancelSubmitCreateNewProject() {
+        this.MODAL_SELECTORS.back_btn().should('not.be.disabled').click();
+    }
+
+
 } //Class

@@ -24,9 +24,9 @@
 // -- This will overwrite an existing command --
 // Cypress.Commands.overwrite('visit', (originalFn, url, options) => { ... })
 
-//const { NewProjectModal } = require("../e2e/pom/newProjectModalPage")
-
-import {createAnAccountPage} from '../e2e/pom/createAnAccountPage';
+import { createAnAccountPage } from '../e2e/pom/createAnAccountPage';
+import { ListOfSurveyPage } from '../e2e/pom/projectListPage';
+import { NewProjectSettingModal } from '../e2e/pom/newProjectModalPage';
 
 
 Cypress.Commands.add('setupDatabase', () => {
@@ -59,13 +59,13 @@ Cypress.Commands.add('waitForElement', (selector, timeout = 10000) => {
             else if (retries < maxRetries) {
                 // Log the remaining time
                 let remainingTime = (maxRetries - retries) * interval / 1000;
-                cy.log(`Waiting for element. Time remaining: ${remainingTime} seconds`);
+                cy.log(`Waiting for element. Time remaining is: ${remainingTime} seconds`);
                 retries++;
                 // Retry after interval
                 cy.wait(interval).then(checkElement);
-            } 
+            }
             else {
-                throw new Error(`Element ${selector} did not appear within ${timeout / 1000} seconds`);
+                throw new Error(`Element with ${selector} did not appear within ${timeout / 1000} seconds`);
             }
         });
     }
@@ -80,8 +80,8 @@ Cypress.Commands.add('waitForSpinnerToDisappear', (maxAttempts = 10, attempt = 1
             if (attempt >= maxAttempts) {
                 throw new Error(`Spinner with selector "${'.k-spin'}" did not disappear after ${maxAttempts} attempts.`);
             }
-        cy.wait(2000); // Wait for 0.5 seconds before retrying
-        cy.waitForSpinnerToDisappear(maxAttempts, attempt + 1);
+            cy.wait(2000);
+            cy.waitForSpinnerToDisappear(maxAttempts, attempt + 1);
         }
     });
 });
@@ -89,31 +89,16 @@ Cypress.Commands.add('waitForSpinnerToDisappear', (maxAttempts = 10, attempt = 1
 Cypress.Commands.add('waitUntilLoadingSpinnerToFinish', () => {
     cy.log('Waiting for the page to load ...');
     cy.getByDocumentSelector('.k-spin', { timeout: 3000 })
-    .then($spinner => {
-        if($spinner.is(':visible')){
-            cy.wait(500);
-            cy.getByDocumentSelector('.k-spin', { timeout: 3000 }).should('not.exist');
-        }
-        else
-            cy.waitUntilLoadingSpinnerToFinish();
+        .then($spinner => {
+            if ($spinner.is(':visible')) {
+                cy.wait(500);
+                cy.getByDocumentSelector('.k-spin', { timeout: 3000 }).should('not.exist');
+            }
+            else
+                cy.waitUntilLoadingSpinnerToFinish();
 
-    })
+        })
 })
-
-Cypress.Commands.add('addNewAccount_ui', (user) => {
-    //cy.visit('/accounts/login/');
-
-    const newAccountPage = new createAnAccountPage();
-    //newAccountPage.createNewAccount(user); // Need to delete account before recreate it
-
-    // NEED TO DELETE AND RECREATE ACCOUNT IN ORDER TO CONFIRM
-    //DEBUG
-    //cy.visit('/accounts/confirm-email/'); 
-    // cy.url('pathname').should('include', '/accounts/confirm-email/');
-    // cy.get('h1').should('be.visible').and('have.text','Confirm your email address');
-    // cy.get('p.registration__message--complete').should('contain', 'Please click the activation link in the email just sent to you.')
-})
-
 
 Cypress.Commands.add('login', (account, name) => {
     cy.visit('/accounts/login/')
@@ -129,26 +114,63 @@ Cypress.Commands.add('openMenu', () => {
     cy.wait(2000);
 })
 
-Cypress.Commands.add('createNewProject', () => { 
-    cy.log('Click "NEW" button to create a new project');
-    cy.getByDocumentSelector('.form-sidebar-wrapper > .k-button').click(); // NEW Button
+Cypress.Commands.add('createTestProject', (title) => {
+    const listOfProjectsPage = new ListOfSurveyPage();
+    listOfProjectsPage.createNewProject();
 
-    cy.url('pathname').should('include', '/#/projects/home')    
+    const newProjectModal = new NewProjectSettingModal();
+    newProjectModal.createProjectByTypeName('Build from scratch');
+
+    newProjectModal.fillInProjectTitle(title);
+    newProjectModal.fillInProjectDescription('This form was created by a bot.');
+    newProjectModal.selectProjectSector('Other');
+    newProjectModal.selectProjectCountry('United States');
+
+    newProjectModal.submitCreateNewProject();
+
+    cy.url().should('include', '/edit')
+
+    cy.getByDocumentSelector('.left-tooltip > .k-icon').click() // Go bak to list of projects
+    cy.waitForSpinnerToDisappear();
 })
 
-Cypress.Commands.add('selectNewProjectType', (type) => { 
+Cypress.Commands.add('addQuestionsToForm', (formTitle, data) => {
+    const listOfProjectsPage = new ListOfSurveyPage();
+    const surveyDetailPage = new SurveyDetailPage();
+    const formQuestionsPage = new FormQuestionsPage();
+
+    listOfProjectsPage.openSurveyByName(formTitle);
+    surveyDetailPage.openSurveySubPageByName('SUMMARY');
+    surveyDetailPage.isFormSubPageByNameOpened('SUMMARY');
+    surveyDetailPage.editFormFrom('SUMMARY');
+
+    formQuestionsPage.addAquestion(data);
+
+    listOfProjectsPage.openSurveyByName(formTitle);
+    surveyDetailPage.openSurveySubPageByName('SUMMARY');
+    surveyDetailPage.isFormSubPageByNameOpened('SUMMARY');
+})
+
+
+
+Cypress.Commands.add('deleteTestProject', (title) => {
+    const surveyListPage = new ListOfSurveyPage();
+    surveyListPage.deleteAProjectByName(title);
+})
+
+Cypress.Commands.add('selectNewProjectType', (type) => {
 
     cy.log('selecting "Build project from scratch"');
-    
+
     switch (type.toLowerCase()) {
-        case 'build from scratch':        cy.getByDocumentSelector('.form-modal__item > :nth-child(1)').click(); break;//        
-        case 'use a template':            cy.getByDocumentSelector('.form-modal__item > :nth-child(2)').click(); break;; //
-        case 'upload an xslform':         cy.getByDocumentSelector('.form-modal__item > :nth-child(3)').click(); break;; //
+        case 'build from scratch': cy.getByDocumentSelector('.form-modal__item > :nth-child(1)').click(); break;//        
+        case 'use a template': cy.getByDocumentSelector('.form-modal__item > :nth-child(2)').click(); break;; //
+        case 'upload an xslform': cy.getByDocumentSelector('.form-modal__item > :nth-child(3)').click(); break;; //
         case 'import an xslform via url': cy.getByDocumentSelector('.form-modal__item > :nth-child(4)').click(); break;; //    
     }
-    cy.wait(3000); //debug
+    cy.wait(1500);
 })
-    
+
 
 // Makes this case insensitive by default
 Cypress.Commands.overwriteQuery('contains', (originalFn, subject, filter, text, options = {}) => {
@@ -162,5 +184,5 @@ Cypress.Commands.overwriteQuery('contains', (originalFn, subject, filter, text, 
     options.matchCase ??= false
 
     return originalFn(subject, filter, text, options)
-    }
+}
 )

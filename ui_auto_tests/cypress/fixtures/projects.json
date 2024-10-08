@@ -1,8 +1,39 @@
 {
-    "project_admin" : {
-        "projectName": "admin-Project-Name",
-        "description": "admin-Project",
-        "sector": "Public Administration",
-        "country": "Canada"        
-    }
+    "survey_0":[
+        {
+            "name": "My new text project - 0",
+            "asset_type": "survey",
+            "content":{
+                "survey": [
+                    {
+                        "type": "text", 
+                        "label": "text me test - 0", 
+                        "name": "text test - 0"
+                    }
+                ]
+            }
+        },
+        {
+            "response": "response to servey"
+        }
+    ],
+
+    "survey_0000":[
+        {
+            "name": "My new text project - 10001",
+            "asset_type": "survey",
+            "content":{
+                "survey": [
+                    {
+                        "type": "text", 
+                        "label": "text me test - 10001", 
+                        "name": "text test - 10001"
+                    }
+                ]
+            }
+        },
+        {
+            "response": "response to servey"
+        }
+    ]
 }

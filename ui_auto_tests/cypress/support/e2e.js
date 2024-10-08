@@ -29,26 +29,10 @@ import './commands'
 //     cy.setupDatabase()
 // })
 
-before('Setup: Creating test accounts', () => { 
+
+before('Setting up the view Port to 1280-720', () => {
     cy.viewport(1280, 720);
-    cy.fixture('user_accounts')
-    .then(users => {
-        users.forEach(user => {
-            cy.log(`-> fullName:${user.fullname} -> username: ${user.username} -> email: ${user.email} -> password: ${user.password}`);
-
-            //By Rest call (HOWTO? ASK JNM)
-            //cy.addNewAccount_api(user);
-
-            //By UI  (See in commands.js)
-            //cy.addNewAccount_ui(user); 
-        });
-    })
 })
-
-// // After('Delete users', () => {
-// //     //Rest api possible
-// //     // UI - Cypress function in command.js
-// // });
 
 afterEach(() => { // run after every test
     cy.log('Test complete.')
